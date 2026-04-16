@@ -31,10 +31,11 @@ plugins:
       enabled: true
       refreshToken: ${YOUTUBE_REFRESH_TOKEN:}
     clients:
+      - TV
       - MUSIC
       - ANDROID_VR
       - WEB
-      - TVHTML5_SIMPLY
+      - WEBEMBEDDED
 
 logging:
   level:
