@@ -33,11 +33,15 @@ plugins:
     pot:
       token: ${YOUTUBE_PO_TOKEN:}
       visitorData: ${YOUTUBE_VISITOR_DATA:}
+    remoteCipher:
+      enabled: true
+      uri: ${YOUTUBE_CIPHER_URL:}
+      password: ${YOUTUBE_CIPHER_PASSWORD:}
     clients:
-      - MUSIC
-      - TV
+      - WEBEMBEDDED
       - WEB
       - MWEB
+      - TV
 
 logging:
   level:
