@@ -1,6 +1,7 @@
 import asyncio
 import os
 
+import aiohttp
 import discord
 import wavelink
 from discord.ext import commands
@@ -43,6 +44,31 @@ async def connect_lavalink(max_attempts=10, delay_seconds=5):
             print(f"[Dolia] Lavalink connection failed: {exc}")
             if attempt == max_attempts:
                 raise
+            await asyncio.sleep(delay_seconds)
+
+
+async def wait_for_lavalink(max_attempts=20, delay_seconds=3):
+    info_url = f"{LAVALINK_URI.rstrip('/')}/v4/info"
+    headers = {
+        "Authorization": LAVALINK_PASSWORD,
+    }
+
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for attempt in range(1, max_attempts + 1):
+            try:
+                print(f"[Dolia] Waiting for Lavalink HTTP readiness ({attempt}/{max_attempts}) at {info_url}")
+                async with session.get(info_url, headers=headers) as response:
+                    if response.status == 200:
+                        print("[Dolia] Lavalink HTTP endpoint is ready")
+                        return
+                    print(f"[Dolia] Lavalink readiness check returned HTTP {response.status}")
+            except Exception as exc:
+                print(f"[Dolia] Lavalink readiness check failed: {exc}")
+
+            if attempt == max_attempts:
+                raise RuntimeError("Lavalink HTTP endpoint did not become ready in time")
+
             await asyncio.sleep(delay_seconds)
 
 
@@ -100,6 +126,7 @@ async def run_bot():
     print("[Dolia] Starting bot process")
 
     async with bot:
+        await wait_for_lavalink()
         await connect_lavalink()
 
         if not _music_loaded:
