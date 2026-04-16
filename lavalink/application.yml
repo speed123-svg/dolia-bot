@@ -35,8 +35,9 @@ plugins:
       visitorData: ${YOUTUBE_VISITOR_DATA:}
     remoteCipher:
       enabled: true
-      uri: ${YOUTUBE_CIPHER_URL:}
+      url: ${YOUTUBE_CIPHER_URL:}
       password: ${YOUTUBE_CIPHER_PASSWORD:}
+      userAgent: dolia-lavalink
     clients:
       - WEBEMBEDDED
       - WEB
