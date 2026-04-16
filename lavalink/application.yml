@@ -1,0 +1,39 @@
+server:
+  port: ${PORT:2333}
+  address: 0.0.0.0
+
+lavalink:
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.0"
+      snapshot: false
+  server:
+    password: ${LAVALINK_PASSWORD:dolia-song-key}
+    playerUpdateInterval: 5
+    sources:
+      youtube: false
+      soundcloud: true
+      http: true
+      local: false
+    # Favor smoother playback over the most aggressive memory/CPU settings.
+    nonAllocatingFrameBuffer: false
+    bufferDurationMs: 800
+    frameBufferDurationMs: 15000
+    opusEncodingQuality: 5
+    resamplingQuality: LOW
+    gc-warnings: true
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    clients:
+      - MUSIC
+      - ANDROID_VR
+      - WEB
+      - TVHTML5_SIMPLY
+
+logging:
+  level:
+    root: INFO
+    lavalink: INFO
