@@ -615,7 +615,7 @@ class Music(commands.Cog):
             )
 
         await interaction.response.defer(ephemeral=True)
-        results = await wavelink.Playable.search(query)
+        results = await wavelink.Playable.search(query, source=wavelink.TrackSource.YouTube)
 
         if hasattr(results, "tracks"):
             tracks = list(results.tracks)
