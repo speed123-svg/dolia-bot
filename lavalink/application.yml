@@ -35,7 +35,6 @@ plugins:
       visitorData: ${YOUTUBE_VISITOR_DATA:}
     clients:
       - MUSIC
-      - TVHTML5EMBEDDED
       - TV
       - WEB
       - MWEB
