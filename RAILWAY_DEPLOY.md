@@ -5,12 +5,6 @@ This repo is set up for two Railway services:
 1. `dolia-bot`
 2. `dolia-lavalink`
 
-## Before you push
-
-1. Initialize git in `d:\dolia-bot`
-2. Commit the project
-3. Push to GitHub
-
 ## Required secrets
 
 Set these in Railway for the bot service:
@@ -19,36 +13,34 @@ Set these in Railway for the bot service:
 - `LAVALINK_PASSWORD`
 - `LAVALINK_URI`
 
-Set this in Railway for the Lavalink service:
+Set this in the Lavalink service:
 
 - `LAVALINK_PASSWORD`
 
-## Service 1: Bot
+## Bot service
 
 - Root directory: `/`
-- Builder: Dockerfile
-- Dockerfile path: `Dockerfile`
+- Builder: `Dockerfile`
 
 Environment variables:
 
 - `DISCORD_TOKEN=<your token>`
 - `LAVALINK_PASSWORD=<same password used by lavalink>`
-- `LAVALINK_URI=http://dolia-lavalink.railway.internal:2333`
+- `LAVALINK_URI=http://dolia-lavalink.railway.internal:<lavalink PORT>`
 
-## Service 2: Lavalink
+## Lavalink service
 
 - Root directory: `/`
-- Builder: Dockerfile
-- Dockerfile path: `lavalink/Dockerfile`
+- Builder: `lavalink/Dockerfile`
 
 Environment variables:
 
-- `SERVER_PORT=2333`
 - `LAVALINK_PASSWORD=<same password used by bot>`
 
 ## Notes
 
 - Keep `.env` out of git. Use Railway variables in production.
-- The bot and Lavalink should be in the same Railway project so private networking is easy.
-- If you change the password, update it in both services.
+- The bot and Lavalink should be in the same Railway project so private networking works.
+- Railway injects `PORT` for the running container. Do not hardcode `2333` unless the service is actually listening there.
+- Your current Railway log shows Lavalink responding on `http://dolia-lavalink.railway.internal:8080`, so the bot service should use that port unless the Lavalink service changes.
 - Railway private DNS uses the format `<service-name>.railway.internal`.
