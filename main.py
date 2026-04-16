@@ -148,4 +148,64 @@ async def main():
         await bot.start(os.getenv("DISCORD_TOKEN"))
 
 
-asyncio.run(run_bot())
+_ready_logged = False
+
+
+async def final_connect_lavalink():
+    print(f"[Dolia] Connecting to Lavalink at {LAVALINK_URI}")
+    node = wavelink.Node(
+        uri=LAVALINK_URI,
+        password=LAVALINK_PASSWORD,
+    )
+    await wavelink.Pool.connect(nodes=[node], client=bot)
+    print("[Dolia] Lavalink connected")
+
+
+@bot.event
+async def on_ready():
+    global _ready_logged
+
+    print(f"[Dolia] Logged in as {bot.user}")
+    if _ready_logged:
+        print("[Dolia] Ready event received again; startup already completed.")
+        return
+
+    await bot.change_presence(
+        activity=discord.Activity(
+            type=discord.ActivityType.listening,
+            name="the melody between worlds",
+        )
+    )
+    _ready_logged = True
+    print("[Dolia] Ready")
+
+
+async def final_main():
+    global _music_loaded, _commands_synced
+
+    if not DISCORD_TOKEN:
+        raise RuntimeError("DISCORD_TOKEN is missing")
+    if not LAVALINK_PASSWORD:
+        raise RuntimeError("LAVALINK_PASSWORD is missing")
+
+    print("[Dolia] Starting bot process")
+
+    async with bot:
+        await wait_for_lavalink()
+        await final_connect_lavalink()
+
+        if not _music_loaded:
+            await bot.load_extension("music")
+            _music_loaded = True
+            print("[Dolia] Music cog loaded")
+
+        if not _commands_synced:
+            await bot.tree.sync()
+            _commands_synced = True
+            print("[Dolia] Slash commands synced")
+
+        print("[Dolia] Connecting to Discord")
+        await bot.start(DISCORD_TOKEN)
+
+
+asyncio.run(final_main())
