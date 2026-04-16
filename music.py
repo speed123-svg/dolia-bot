@@ -527,6 +527,12 @@ class Music(commands.Cog):
 
     async def enqueue_track(self, interaction, track):
         player = await get_player(interaction)
+        print(
+            f"[Dolia] enqueue_track guild={interaction.guild.id} "
+            f"channel={getattr(getattr(player, 'channel', None), 'id', None)} "
+            f"connected={getattr(player, 'connected', None)} current={bool(player.current)} "
+            f"track={track.title}"
+        )
         track.extras = {
             "requester_id": interaction.user.id,
             "requester_name": interaction.user.display_name,
@@ -542,7 +548,13 @@ class Music(commands.Cog):
                 "description": f"**{track.title}** has been placed at **position {position}**.",
             }
 
-        await player.play(track)
+        try:
+            await player.play(track)
+        except Exception as exc:
+            print(f"[Dolia] player.play failed for guild={interaction.guild.id}: {exc!r}")
+            raise
+
+        print(f"[Dolia] player.play succeeded for guild={interaction.guild.id}: {track.title}")
         await self.refresh_panel(interaction.guild.id, note=say(PLAY_LINES), channel=interaction.channel)
         return {
             "title": "Melody Begun",
@@ -570,8 +582,28 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_track_exception(self, payload):
         player = payload.player
+        print(
+            f"[Dolia] Track exception guild={getattr(getattr(player, 'guild', None), 'id', None)} "
+            f"exception={getattr(payload, 'exception', None)!r}"
+        )
         if player:
             await self.refresh_panel(player.guild.id, note=say(TRACK_ERROR_LINES))
+
+    @commands.Cog.listener()
+    async def on_wavelink_track_start(self, payload):
+        player = payload.player
+        track = payload.track
+        print(
+            f"[Dolia] Track start guild={getattr(getattr(player, 'guild', None), 'id', None)} "
+            f"track={getattr(track, 'title', None)}"
+        )
+
+    @commands.Cog.listener()
+    async def on_wavelink_websocket_closed(self, payload):
+        print(
+            f"[Dolia] Websocket closed guild={payload.guild.id} "
+            f"code={payload.code} by_discord={payload.by_discord} reason={payload.reason!r}"
+        )
 
     @app_commands.command(name="play", description="Summon a melody by name or URL")
     @app_commands.describe(query="Song name or YouTube URL")
