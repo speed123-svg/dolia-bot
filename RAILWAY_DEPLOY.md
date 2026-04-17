@@ -47,6 +47,7 @@ Environment variables:
 Environment variables:
 
 - `LAVALINK_PASSWORD=<same password used by bot>`
+- `JAVA_TOOL_OPTIONS=-Xms128m -Xmx384m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Djava.awt.headless=true`
 - `YOUTUBE_REFRESH_TOKEN=<youtube refresh token, optional>`
 - `YOUTUBE_PO_TOKEN=<po token>`
 - `YOUTUBE_VISITOR_DATA=<visitor data>`
@@ -73,6 +74,7 @@ The YouTube playback fix was confirmed with this variable set on the Lavalink se
 
 - Keep `.env` out of git. Use Railway variables in production.
 - Keep the bot, Lavalink, and cipher services in the same Railway project so private networking works.
+- If Railway is still killing Lavalink for memory after this change, raise the service memory limit or lower `-Xmx` further. A good starting rule is to keep heap at roughly 60-75% of the container memory so native memory, threads, and buffers still have headroom.
 - Railway injects `PORT` for the running container. Do not hardcode `2333` unless the service is actually listening there.
 - Your current Railway log shows Lavalink responding on `http://dolia-lavalink.railway.internal:8080`, so the bot service should use that port unless the Lavalink service changes.
 - If YouTube starts failing again with signature or login errors, check the PO token, visitor data, and cipher service reachability first.
