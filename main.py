@@ -12,7 +12,7 @@ load_dotenv()
 LAVALINK_URI = os.getenv("LAVALINK_URI", "http://localhost:2333").rstrip("/")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-STATUS_TEXT = os.getenv("STATUS_TEXT", "the melody between worlds").strip()
+STATUS_TEXT = os.getenv("STATUS_TEXT", "The melody between worlds").strip()
 STATUS_TYPE = os.getenv("STATUS_TYPE", "custom").strip().lower()
 
 _music_loaded = False
