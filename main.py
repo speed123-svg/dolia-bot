@@ -108,7 +108,7 @@ async def on_ready():
     if not _lavalink_connected:
         await ensure_startup()
 
-    await bot.change_presence(activity=build_presence_activity())
+    await bot.change_presence(status=discord.Status.idle, activity=build_presence_activity())
 
     print("[Dolia] Ready")
 
