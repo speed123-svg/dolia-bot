@@ -12,6 +12,8 @@ load_dotenv()
 LAVALINK_URI = os.getenv("LAVALINK_URI", "http://localhost:2333").rstrip("/")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+STATUS_TEXT = os.getenv("STATUS_TEXT", "the melody between worlds").strip()
+STATUS_TYPE = os.getenv("STATUS_TYPE", "custom").strip().lower()
 
 _music_loaded = False
 _commands_synced = False
@@ -82,6 +84,23 @@ async def ensure_startup() -> None:
         print("[Dolia] Slash commands synced")
 
 
+def build_presence_activity():
+    if not STATUS_TEXT:
+        raise RuntimeError("STATUS_TEXT must not be empty")
+
+    if STATUS_TYPE == "custom":
+        return discord.CustomActivity(name=STATUS_TEXT)
+
+    activity_types = {
+        "playing": discord.ActivityType.playing,
+        "listening": discord.ActivityType.listening,
+        "watching": discord.ActivityType.watching,
+        "competing": discord.ActivityType.competing,
+    }
+    activity_type = activity_types.get(STATUS_TYPE, discord.ActivityType.playing)
+    return discord.Activity(type=activity_type, name=STATUS_TEXT)
+
+
 @bot.event
 async def on_ready():
     print(f"[Dolia] Logged in as {bot.user}")
@@ -89,12 +108,8 @@ async def on_ready():
     if not _lavalink_connected:
         await ensure_startup()
 
-    await bot.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.listening,
-            name="the melody between worlds",
-        )
-    )
+    await bot.change_presence(activity=build_presence_activity())
+
     print("[Dolia] Ready")
 
 

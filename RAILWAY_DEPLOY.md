@@ -13,6 +13,8 @@ Set these in Railway for the bot service:
 - `DISCORD_TOKEN`
 - `LAVALINK_PASSWORD`
 - `LAVALINK_URI`
+- `STATUS_TEXT` optional fixed bot status text
+- `STATUS_TYPE` optional one of `custom`, `playing`, `listening`, `watching`, `competing`
 
 Set this in the Lavalink service:
 
@@ -38,6 +40,8 @@ Environment variables:
 - `DISCORD_TOKEN=<your token>`
 - `LAVALINK_PASSWORD=<same password used by lavalink>`
 - `LAVALINK_URI=http://dolia-lavalink.railway.internal:<lavalink PORT>`
+- `STATUS_TEXT=the melody between worlds`
+- `STATUS_TYPE=custom`
 
 ## Lavalink service
 
