@@ -484,7 +484,10 @@ class Music(commands.Cog):
 
         channel = self.bot.get_channel(data["channel_id"])
         if not channel:
-            return None
+            try:
+                channel = await self.bot.fetch_channel(data["channel_id"])
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return None
 
         try:
             return await channel.fetch_message(data["message_id"])
