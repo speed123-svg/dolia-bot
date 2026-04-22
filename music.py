@@ -22,8 +22,6 @@ from responses import (
     SEARCH_LINES,
     SKIP_LINES,
     STOP_LINES,
-    QUEUE_ENDED_LINES,
-    TRACK_END_LINES,
     TRACK_ERROR_LINES,
     VOLUME_LINES,
     say,
@@ -561,11 +559,6 @@ class Music(commands.Cog):
             await self.refresh_panel(player.guild.id, note=say(PLAY_LINES))
         else:
             await self.delete_panel(player.guild.id)
-            await self.post_status_message(
-                player.guild.id,
-                "The Tide Falls Silent",
-                say(QUEUE_ENDED_LINES),
-            )
 
     @commands.Cog.listener()
     async def on_wavelink_track_exception(self, payload):
