@@ -22,6 +22,7 @@ from responses import (
     SEARCH_LINES,
     SKIP_LINES,
     STOP_LINES,
+    QUEUE_ENDED_LINES,
     TRACK_ERROR_LINES,
     VOLUME_LINES,
     say,
@@ -83,6 +84,7 @@ class VolumeModal(discord.ui.Modal, title="Set Dolia's Volume"):
         await self.cog.refresh_panel(
             interaction.guild.id,
             note=f"{say(VOLUME_LINES)} Now set to **{level}%**.",
+            channel=interaction.channel,
         )
         await interaction.response.send_message(
             embed=status_embed("Volume Shifted", f"Dolia now sings at **{level}%** volume."),
@@ -175,7 +177,7 @@ class ControlPanelView(discord.ui.View):
             note = say(PAUSE_LINES)
 
         await interaction.response.defer()
-        await self.cog.refresh_panel(interaction.guild.id, note=note)
+        await self.cog.refresh_panel(interaction.guild.id, note=note, channel=interaction.channel)
 
     @discord.ui.button(emoji="⏭️", style=discord.ButtonStyle.secondary, custom_id="dolia:skip")
     async def skip(self, interaction, button):
@@ -185,7 +187,7 @@ class ControlPanelView(discord.ui.View):
 
         await player.skip(force=True)
         await interaction.response.defer()
-        await self.cog.refresh_panel(interaction.guild.id, note=say(SKIP_LINES))
+        await self.cog.refresh_panel(interaction.guild.id, note=say(SKIP_LINES), channel=interaction.channel)
 
     @discord.ui.button(emoji="⏹️", style=discord.ButtonStyle.danger, custom_id="dolia:stop")
     async def stop(self, interaction, button):
@@ -197,7 +199,7 @@ class ControlPanelView(discord.ui.View):
         await player.stop()
         await player.disconnect()
         await interaction.response.defer()
-        await self.cog.refresh_panel(interaction.guild.id, note=say(STOP_LINES))
+        await self.cog.refresh_panel(interaction.guild.id, note=say(STOP_LINES), channel=interaction.channel)
 
     @discord.ui.button(emoji="🔁", style=discord.ButtonStyle.secondary, custom_id="dolia:loop")
     async def loop(self, interaction, button):
@@ -217,7 +219,7 @@ class ControlPanelView(discord.ui.View):
             note = say(LOOP_OFF_LINES)
 
         await interaction.response.defer()
-        await self.cog.refresh_panel(interaction.guild.id, note=note)
+        await self.cog.refresh_panel(interaction.guild.id, note=note, channel=interaction.channel)
 
     @discord.ui.button(emoji="🔊", style=discord.ButtonStyle.secondary, custom_id="dolia:volume")
     async def volume(self, interaction, button):
@@ -290,7 +292,7 @@ class ControlPanelView(discord.ui.View):
             note = say(PAUSE_LINES)
 
         await interaction.response.defer()
-        await self.cog.refresh_panel(interaction.guild.id, note=note)
+        await self.cog.refresh_panel(interaction.guild.id, note=note, channel=interaction.channel)
 
     @discord.ui.button(label="Skip", emoji="⏭️", style=discord.ButtonStyle.secondary, custom_id="dolia:skip", row=0)
     async def skip(self, interaction, button):
@@ -311,7 +313,7 @@ class ControlPanelView(discord.ui.View):
         await player.stop()
         await player.disconnect()
         await interaction.response.defer()
-        await self.cog.refresh_panel(interaction.guild.id, note=say(STOP_LINES))
+        await self.cog.refresh_panel(interaction.guild.id, note=say(STOP_LINES), channel=interaction.channel)
 
     @discord.ui.button(label="Loop Off", emoji="🔁", style=discord.ButtonStyle.secondary, custom_id="dolia:loop", row=0)
     async def loop(self, interaction, button):
@@ -331,7 +333,7 @@ class ControlPanelView(discord.ui.View):
             note = say(LOOP_OFF_LINES)
 
         await interaction.response.defer()
-        await self.cog.refresh_panel(interaction.guild.id, note=note)
+        await self.cog.refresh_panel(interaction.guild.id, note=note, channel=interaction.channel)
 
     @discord.ui.button(label="Volume", emoji="🔊", style=discord.ButtonStyle.secondary, custom_id="dolia:volume", row=0)
     async def volume(self, interaction, button):
@@ -385,6 +387,7 @@ class ControlPanelView(discord.ui.View):
         await self.cog.refresh_panel(
             interaction.guild.id,
             note="Dolia stirs the current and rearranges the waiting melodies.",
+            channel=interaction.channel,
         )
 
     @discord.ui.button(label="Clear Queue", emoji="🧹", style=discord.ButtonStyle.secondary, custom_id="dolia:clear_queue", row=1)
@@ -404,6 +407,7 @@ class ControlPanelView(discord.ui.View):
         await self.cog.refresh_panel(
             interaction.guild.id,
             note="Dolia clears the waiting verses and leaves only the current melody.",
+            channel=interaction.channel,
         )
 
     @discord.ui.button(label="Mute", emoji="🔇", style=discord.ButtonStyle.secondary, custom_id="dolia:mute", row=1)
@@ -423,7 +427,7 @@ class ControlPanelView(discord.ui.View):
             note = "Dolia lowers the tide to a whispering silence."
 
         await interaction.response.defer()
-        await self.cog.refresh_panel(interaction.guild.id, note=note)
+        await self.cog.refresh_panel(interaction.guild.id, note=note, channel=interaction.channel)
 
 
 class Music(commands.Cog):
@@ -439,6 +443,23 @@ class Music(commands.Cog):
     def get_panel_view(self):
         return ControlPanelView(self)
 
+    def remember_music_channel(self, player, channel):
+        if player and channel:
+            player._dolia_text_channel_id = channel.id
+
+    def get_music_channel(self, player):
+        channel_id = getattr(player, "_dolia_text_channel_id", None)
+        if channel_id:
+            channel = self.bot.get_channel(channel_id)
+            if channel:
+                return channel
+
+        ref = self.panel_refs.get(player.guild.id) if player and player.guild else None
+        if ref:
+            return self.bot.get_channel(ref["channel_id"])
+
+        return None
+
     async def delete_panel(self, guild_id):
         message = await self.get_panel_message(guild_id)
         self.panel_refs.pop(guild_id, None)
@@ -451,16 +472,6 @@ class Music(commands.Cog):
             pass
 
     async def post_status_message(self, guild_id, title, description, *, channel=None):
-        if channel is None:
-            ref = self.panel_refs.get(guild_id)
-            if ref:
-                channel = self.bot.get_channel(ref["channel_id"])
-
-        if channel is None:
-            guild = self.bot.get_guild(guild_id)
-            if guild and guild.system_channel:
-                channel = guild.system_channel
-
         if channel is None:
             return None
 
@@ -494,13 +505,19 @@ class Music(commands.Cog):
         view = ControlPanelView(self, player)
 
         message = await self.get_panel_message(guild_id)
+        if channel:
+            self.remember_music_channel(player, channel)
+            if message and message.channel.id != channel.id:
+                try:
+                    await message.delete()
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    pass
+                message = None
 
         if channel is None:
             channel = message.channel if message else None
             if channel is None:
-                ref = self.panel_refs.get(guild_id)
-                if ref:
-                    channel = self.bot.get_channel(ref["channel_id"])
+                channel = self.get_music_channel(player)
 
         if channel is None:
             return None
@@ -525,6 +542,7 @@ class Music(commands.Cog):
 
     async def enqueue_track(self, interaction, track):
         player = await get_player(interaction)
+        self.remember_music_channel(player, interaction.channel)
         track.extras = {
             "requester_id": interaction.user.id,
             "requester_name": interaction.user.display_name,
@@ -558,7 +576,14 @@ class Music(commands.Cog):
             await player.play(next_track)
             await self.refresh_panel(player.guild.id, note=say(PLAY_LINES))
         else:
+            channel = self.get_music_channel(player)
             await self.delete_panel(player.guild.id)
+            await self.post_status_message(
+                player.guild.id,
+                "The Tide Falls Silent",
+                say(QUEUE_ENDED_LINES),
+                channel=channel,
+            )
 
     @commands.Cog.listener()
     async def on_wavelink_track_exception(self, payload):
@@ -632,7 +657,7 @@ class Music(commands.Cog):
             )
 
         await player.skip(force=True)
-        await self.refresh_panel(interaction.guild.id, note=say(SKIP_LINES))
+        await self.refresh_panel(interaction.guild.id, note=say(SKIP_LINES), channel=interaction.channel)
         await interaction.response.send_message(
             embed=status_embed("Verse Skipped", say(SKIP_LINES)),
             ephemeral=True,
@@ -662,7 +687,7 @@ class Music(commands.Cog):
             )
 
         await player.pause(True)
-        await self.refresh_panel(interaction.guild.id, note=say(PAUSE_LINES))
+        await self.refresh_panel(interaction.guild.id, note=say(PAUSE_LINES), channel=interaction.channel)
         await interaction.response.send_message(
             embed=status_embed("Melody Paused", say(PAUSE_LINES)),
             ephemeral=True,
@@ -678,7 +703,7 @@ class Music(commands.Cog):
             )
 
         await player.pause(False)
-        await self.refresh_panel(interaction.guild.id, note=say(RESUME_LINES))
+        await self.refresh_panel(interaction.guild.id, note=say(RESUME_LINES), channel=interaction.channel)
         await interaction.response.send_message(
             embed=status_embed("Melody Resumed", say(RESUME_LINES)),
             ephemeral=True,
@@ -698,6 +723,7 @@ class Music(commands.Cog):
         await self.refresh_panel(
             interaction.guild.id,
             note=f"{say(VOLUME_LINES)} Now set to **{level}%**.",
+            channel=interaction.channel,
         )
         await interaction.response.send_message(
             embed=status_embed("Volume Shifted", f"Dolia now sings at **{level}%** volume."),
@@ -731,7 +757,7 @@ class Music(commands.Cog):
             player.queue.mode = wavelink.QueueMode.normal
             note = say(LOOP_OFF_LINES)
 
-        await self.refresh_panel(interaction.guild.id, note=note)
+        await self.refresh_panel(interaction.guild.id, note=note, channel=interaction.channel)
         await interaction.response.send_message(
             embed=status_embed("Loop Changed", f"Loop mode is now **{loop_mode_label(player.queue.mode)}**."),
             ephemeral=True,
