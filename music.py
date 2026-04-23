@@ -1,4 +1,3 @@
-import random
 from urllib.parse import urlparse
 
 import discord
@@ -350,7 +349,7 @@ class ControlPanelView(discord.ui.View):
             return
 
         await interaction.response.send_message(
-            embed=queue_embed(list(player.queue), interaction.guild, player.current),
+            embed=queue_embed(player.queue[:10], interaction.guild, player.current, total_count=len(player.queue)),
             ephemeral=True,
         )
 
@@ -371,19 +370,14 @@ class ControlPanelView(discord.ui.View):
         if not player:
             return
 
-        queued_tracks = list(player.queue)
-        if len(queued_tracks) < 2:
+        if len(player.queue) < 2:
             return await interaction.response.send_message(
                 embed=error_embed("Dolia needs at least two queued songs to shuffle the tide."),
                 ephemeral=True,
             )
 
-        random.shuffle(queued_tracks)
-        player.queue.clear()
-        for track in queued_tracks:
-            player.queue.put(track)
-
         await interaction.response.defer()
+        player.queue.shuffle()
         await self.cog.refresh_panel(
             interaction.guild.id,
             note="Dolia stirs the current and rearranges the waiting melodies.",
@@ -553,7 +547,7 @@ class Music(commands.Cog):
 
         if player.current:
             player.queue.put(track)
-            position = len(list(player.queue))
+            position = len(player.queue)
             note = f"{say(QUEUE_LINES)} Added at **position {position}**."
             await self.refresh_panel(interaction.guild.id, note=note, channel=interaction.channel)
             return {
@@ -676,7 +670,7 @@ class Music(commands.Cog):
             )
 
         await interaction.response.send_message(
-            embed=queue_embed(list(player.queue), interaction.guild, player.current),
+            embed=queue_embed(player.queue[:10], interaction.guild, player.current, total_count=len(player.queue)),
             ephemeral=True,
         )
 

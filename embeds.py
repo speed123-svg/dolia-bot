@@ -50,7 +50,9 @@ def control_panel_embed(player, guild, *, note=None):
     )
 
     current = getattr(player, "current", None) if player else None
-    queue_list = list(player.queue) if player else []
+    queue = getattr(player, "queue", None)
+    queue_count = len(queue) if queue else 0
+    upcoming_tracks = queue[:5] if queue_count else []
 
     if current:
         requester_id = getattr(current.extras, "requester_id", None)
@@ -66,17 +68,17 @@ def control_panel_embed(player, guild, *, note=None):
         embed.add_field(name="Duration", value=format_duration(current.length), inline=True)
         embed.add_field(name="Requester", value=requester_text, inline=True)
         embed.add_field(name="Position", value="Now Playing", inline=True)
-        embed.add_field(name="Queue", value=str(len(queue_list)), inline=True)
+        embed.add_field(name="Queue", value=str(queue_count), inline=True)
         embed.add_field(name="Volume", value=f"{getattr(player, 'volume', 100)}%", inline=True)
         embed.add_field(name="Loop", value=loop_mode_label(player.queue.mode), inline=True)
 
-        if queue_list:
-            lines = [f"`{index}.` {track.title}" for index, track in enumerate(queue_list[:5], start=1)]
+        if upcoming_tracks:
+            lines = [f"`{index}.` {track.title}" for index, track in enumerate(upcoming_tracks, start=1)]
             embed.add_field(name="Up Next", value="\n".join(lines), inline=False)
     else:
         embed.description = note or "🌊 The tide is calm. No melody is flowing right now."
         embed.set_thumbnail(url=DOLIA_IDLE_THUMB)
-        embed.add_field(name="Queue", value=str(len(queue_list)), inline=True)
+        embed.add_field(name="Queue", value=str(queue_count), inline=True)
         embed.add_field(name="Loop", value="Off", inline=True)
         embed.add_field(name="Volume", value="100%", inline=True)
 
@@ -84,7 +86,7 @@ def control_panel_embed(player, guild, *, note=None):
     return embed
 
 
-def queue_embed(queue_list, guild, current=None):
+def queue_embed(queue_list, guild, current=None, *, total_count=None):
     embed = discord.Embed(
         title="Dolia's Songbook",
         description="🌊 The melodies waiting beneath the tide.",
@@ -105,9 +107,11 @@ def queue_embed(queue_list, guild, current=None):
             inline=False,
         )
 
+    queue_total = len(queue_list) if total_count is None else total_count
+
     if queue_list:
         lines = []
-        for index, track in enumerate(queue_list[:10], start=1):
+        for index, track in enumerate(queue_list, start=1):
             requester_id = getattr(track.extras, "requester_id", None)
             requester = guild.get_member(requester_id) if requester_id else None
             requester_text = requester.display_name if requester else "Unknown traveler"
@@ -116,6 +120,12 @@ def queue_embed(queue_list, guild, current=None):
                 f"{format_duration(track.length)} | requested by {requester_text}"
             )
         embed.add_field(name="Queued Melodies", value="\n".join(lines), inline=False)
+        if queue_total > len(queue_list):
+            embed.add_field(
+                name="More Waiting",
+                value=f"And **{queue_total - len(queue_list)}** more melodies beyond this page.",
+                inline=False,
+            )
     else:
         embed.add_field(name="Queued Melodies", value="No verses are waiting.", inline=False)
 
