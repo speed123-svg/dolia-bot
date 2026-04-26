@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from urllib.parse import urlparse
 
 import discord
@@ -26,6 +28,8 @@ from responses import (
     VOLUME_LINES,
     say,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 def user_in_vc(interaction):
@@ -184,9 +188,8 @@ class ControlPanelView(discord.ui.View):
         if not player:
             return
 
-        await player.skip(force=True)
+        await self.cog.skip_current_track(player, channel=interaction.channel)
         await interaction.response.defer()
-        await self.cog.refresh_panel(interaction.guild.id, note=say(SKIP_LINES), channel=interaction.channel)
 
     @discord.ui.button(emoji="⏹️", style=discord.ButtonStyle.danger, custom_id="dolia:stop")
     async def stop(self, interaction, button):
@@ -299,7 +302,7 @@ class ControlPanelView(discord.ui.View):
         if not player:
             return
 
-        await player.skip(force=True)
+        await self.cog.skip_current_track(player, channel=interaction.channel)
         await interaction.response.defer()
 
     @discord.ui.button(label="Stop", emoji="⏹️", style=discord.ButtonStyle.danger, custom_id="dolia:stop", row=0)
@@ -437,6 +440,13 @@ class Music(commands.Cog):
     def get_panel_view(self):
         return ControlPanelView(self)
 
+    def get_advance_lock(self, player):
+        lock = getattr(player, "_dolia_advance_lock", None)
+        if lock is None:
+            lock = asyncio.Lock()
+            player._dolia_advance_lock = lock
+        return lock
+
     def remember_music_channel(self, player, channel):
         if player and channel:
             player._dolia_text_channel_id = channel.id
@@ -537,6 +547,47 @@ class Music(commands.Cog):
         }
         return new_message
 
+    async def play_next_queued_track(self, player, *, note=None, channel=None):
+        if not player or not player.guild:
+            return False
+
+        async with self.get_advance_lock(player):
+            if player.queue:
+                next_track = player.queue.get()
+                await player.play(next_track)
+                await self.refresh_panel(player.guild.id, note=note or say(PLAY_LINES), channel=channel)
+                return True
+
+            await self.delete_panel(player.guild.id)
+            await self.post_status_message(
+                player.guild.id,
+                "The Tide Falls Silent",
+                say(QUEUE_ENDED_LINES),
+                channel=channel or self.get_music_channel(player),
+            )
+            return False
+
+    async def skip_current_track(self, player, *, channel=None):
+        if not player or not player.guild:
+            return False
+
+        async with self.get_advance_lock(player):
+            if player.queue:
+                next_track = player.queue.get()
+                await player.play(next_track)
+                await self.refresh_panel(player.guild.id, note=say(SKIP_LINES), channel=channel)
+                return True
+
+            await player.skip(force=True)
+            await self.delete_panel(player.guild.id)
+            await self.post_status_message(
+                player.guild.id,
+                "The Tide Falls Silent",
+                say(QUEUE_ENDED_LINES),
+                channel=channel or self.get_music_channel(player),
+            )
+            return False
+
     async def enqueue_track(self, interaction, track):
         player = await get_player(interaction)
         self.remember_music_channel(player, interaction.channel)
@@ -568,25 +619,41 @@ class Music(commands.Cog):
         if not player:
             return
 
-        if player.queue:
-            next_track = player.queue.get()
-            await player.play(next_track)
-            await self.refresh_panel(player.guild.id, note=say(PLAY_LINES))
-        else:
-            channel = self.get_music_channel(player)
-            await self.delete_panel(player.guild.id)
-            await self.post_status_message(
-                player.guild.id,
-                "The Tide Falls Silent",
-                say(QUEUE_ENDED_LINES),
-                channel=channel,
-            )
+        reason = (payload.reason or "").upper()
+        LOGGER.info("Track ended in guild %s with reason %s", player.guild.id if player.guild else "unknown", reason)
+
+        if reason != "FINISHED":
+            return
+
+        await self.play_next_queued_track(player, note=say(PLAY_LINES))
 
     @commands.Cog.listener()
     async def on_wavelink_track_exception(self, payload):
         player = payload.player
-        if player:
-            await self.refresh_panel(player.guild.id, note=say(TRACK_ERROR_LINES))
+        if not player:
+            return
+
+        LOGGER.warning(
+            "Track exception in guild %s for %s: %s",
+            player.guild.id if player.guild else "unknown",
+            getattr(payload.track, "title", "unknown track"),
+            payload.exception,
+        )
+        await self.play_next_queued_track(player, note=say(TRACK_ERROR_LINES))
+
+    @commands.Cog.listener()
+    async def on_wavelink_track_stuck(self, payload):
+        player = payload.player
+        if not player:
+            return
+
+        LOGGER.warning(
+            "Track stuck in guild %s for %s after %sms",
+            player.guild.id if player.guild else "unknown",
+            getattr(payload.track, "title", "unknown track"),
+            payload.threshold,
+        )
+        await self.play_next_queued_track(player, note=say(TRACK_ERROR_LINES))
 
     @app_commands.command(name="play", description="Summon a melody by name or URL")
     @app_commands.describe(query="Song name or YouTube URL")
@@ -598,7 +665,8 @@ class Music(commands.Cog):
             )
 
         await interaction.response.defer(ephemeral=True)
-        results = await wavelink.Playable.search(query, source=wavelink.TrackSource.YouTube)
+        search_kwargs = {} if is_url(query) else {"source": wavelink.TrackSource.YouTube}
+        results = await wavelink.Playable.search(query, **search_kwargs)
 
         if hasattr(results, "tracks"):
             tracks = list(results.tracks)
@@ -653,8 +721,7 @@ class Music(commands.Cog):
                 ephemeral=True,
             )
 
-        await player.skip(force=True)
-        await self.refresh_panel(interaction.guild.id, note=say(SKIP_LINES), channel=interaction.channel)
+        await self.skip_current_track(player, channel=interaction.channel)
         await interaction.response.send_message(
             embed=status_embed("Verse Skipped", say(SKIP_LINES)),
             ephemeral=True,
