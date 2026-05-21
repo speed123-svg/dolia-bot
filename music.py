@@ -32,6 +32,69 @@ from responses import (
 LOGGER = logging.getLogger(__name__)
 
 
+class DoliaPlayer(wavelink.Player):
+    async def on_voice_state_update(self, data):
+        guild_id = self.guild.id if self.guild else data.get("guild_id")
+        channel_id = data.get("channel_id")
+
+        if not channel_id:
+            LOGGER.warning("Discord voice state removed player: guild=%s", guild_id)
+
+        await super().on_voice_state_update(data)
+
+    async def _dispatch_voice_update(self):
+        assert self.guild is not None
+        data = self._voice_state["voice"]
+
+        session_id = data.get("session_id")
+        token = data.get("token")
+        endpoint = data.get("endpoint")
+        channel_id = self._voice_state.get("channel_id")
+
+        if not session_id or not token or not endpoint:
+            LOGGER.warning(
+                "Incomplete Discord voice update: guild=%s channel=%s has_session=%s has_token=%s has_endpoint=%s",
+                self.guild.id,
+                channel_id,
+                bool(session_id),
+                bool(token),
+                bool(endpoint),
+            )
+            return
+
+        request = {
+            "voice": {
+                "sessionId": session_id,
+                "token": token,
+                "endpoint": endpoint,
+                "channelId": channel_id,
+            }
+        }
+
+        try:
+            await self.node._update_player(self.guild.id, data=request)
+        except wavelink.LavalinkException as exc:
+            LOGGER.error(
+                "Lavalink rejected Discord voice update: guild=%s channel=%s endpoint=%s status=%s error=%s path=%s",
+                self.guild.id,
+                channel_id,
+                endpoint,
+                exc.status,
+                exc.error,
+                exc.path,
+            )
+            await self.disconnect()
+        else:
+            self._connected = True
+            self._connection_event.set()
+            LOGGER.info(
+                "Lavalink accepted Discord voice update: guild=%s channel=%s endpoint=%s",
+                self.guild.id,
+                channel_id,
+                endpoint,
+            )
+
+
 def user_in_vc(interaction):
     return interaction.user.voice is not None
 
@@ -43,10 +106,27 @@ def is_url(query):
 
 async def get_player(interaction):
     if interaction.guild.voice_client:
+        LOGGER.info(
+            "Reusing existing player: guild=%s user=%s",
+            interaction.guild.id,
+            interaction.user.id,
+        )
         return interaction.guild.voice_client
 
     channel = interaction.user.voice.channel
-    return await channel.connect(cls=wavelink.Player, self_deaf=True)
+    LOGGER.info(
+        "Connecting player: guild=%s user=%s channel=%s",
+        interaction.guild.id,
+        interaction.user.id,
+        channel.id,
+    )
+    player = await channel.connect(cls=DoliaPlayer, self_deaf=True)
+    LOGGER.info(
+        "Connected player: guild=%s channel=%s",
+        interaction.guild.id,
+        channel.id,
+    )
+    return player
 
 
 class VolumeModal(discord.ui.Modal, title="Set Dolia's Volume"):
@@ -127,6 +207,14 @@ class SearchResultSelect(discord.ui.Select):
 
         await interaction.response.defer()
         track = self.tracks[int(self.values[0])]
+        LOGGER.info(
+            "Search result selected: guild=%s channel=%s user=%s title=%r source=%s",
+            interaction.guild.id if interaction.guild else None,
+            interaction.channel.id if interaction.channel else None,
+            interaction.user.id if interaction.user else None,
+            getattr(track, "title", None),
+            getattr(track, "source", None),
+        )
         status = await self.cog.enqueue_track(interaction, track)
         await interaction.edit_original_response(
             content=None,
@@ -589,6 +677,14 @@ class Music(commands.Cog):
             return False
 
     async def enqueue_track(self, interaction, track):
+        LOGGER.info(
+            "Enqueue requested: guild=%s channel=%s user=%s title=%r source=%s",
+            interaction.guild.id if interaction.guild else None,
+            interaction.channel.id if interaction.channel else None,
+            interaction.user.id if interaction.user else None,
+            getattr(track, "title", None),
+            getattr(track, "source", None),
+        )
         player = await get_player(interaction)
         self.remember_music_channel(player, interaction.channel)
         track.extras = {
@@ -607,6 +703,12 @@ class Music(commands.Cog):
             }
 
         await player.play(track)
+        LOGGER.info(
+            "Playback started: guild=%s title=%r source=%s",
+            interaction.guild.id,
+            getattr(track, "title", None),
+            getattr(track, "source", None),
+        )
         await self.refresh_panel(interaction.guild.id, note=say(PLAY_LINES), channel=interaction.channel)
         return {
             "title": "Melody Begun",
@@ -659,12 +761,25 @@ class Music(commands.Cog):
     @app_commands.describe(query="Song name or YouTube URL")
     async def play(self, interaction, query: str):
         if not user_in_vc(interaction):
+            LOGGER.info(
+                "Play rejected because user is not in voice: guild=%s user=%s query=%r",
+                interaction.guild.id if interaction.guild else None,
+                interaction.user.id if interaction.user else None,
+                query,
+            )
             return await interaction.response.send_message(
                 embed=error_embed(say(NOT_IN_VC_LINES)),
                 ephemeral=True,
             )
 
         await interaction.response.defer(ephemeral=True)
+        LOGGER.info(
+            "Play search started: guild=%s channel=%s user=%s query=%r",
+            interaction.guild.id if interaction.guild else None,
+            interaction.channel.id if interaction.channel else None,
+            interaction.user.id if interaction.user else None,
+            query,
+        )
         search_kwargs = {} if is_url(query) else {"source": wavelink.TrackSource.YouTube}
         results = await wavelink.Playable.search(query, **search_kwargs)
 
@@ -674,10 +789,25 @@ class Music(commands.Cog):
             tracks = list(results)
 
         if not tracks:
+            LOGGER.info(
+                "Play search returned no tracks: guild=%s user=%s query=%r",
+                interaction.guild.id if interaction.guild else None,
+                interaction.user.id if interaction.user else None,
+                query,
+            )
             return await interaction.followup.send(
                 embed=error_embed(say(NO_TRACK_LINES)),
                 ephemeral=True,
             )
+
+        LOGGER.info(
+            "Play search returned tracks: guild=%s user=%s query=%r count=%s first_title=%r",
+            interaction.guild.id if interaction.guild else None,
+            interaction.user.id if interaction.user else None,
+            query,
+            len(tracks),
+            getattr(tracks[0], "title", None),
+        )
 
         if is_url(query):
             status = await self.enqueue_track(interaction, tracks[0])

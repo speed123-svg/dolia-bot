@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 import aiohttp
@@ -14,6 +15,9 @@ LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 STATUS_TEXT = os.getenv("STATUS_TEXT", "The melody between worlds").strip()
 STATUS_TYPE = os.getenv("STATUS_TYPE", "custom").strip().lower()
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").strip().upper()
+
+LOGGER = logging.getLogger(__name__)
 
 _music_loaded = False
 _commands_synced = False
@@ -30,6 +34,52 @@ bot = commands.Bot(
     help_command=None,
     description="Dolia - Song-Weaver of the Scarlet Kingdom",
 )
+
+
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=getattr(logging, LOG_LEVEL, logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    logging.getLogger("discord").setLevel(logging.INFO)
+    logging.getLogger("wavelink").setLevel(logging.INFO)
+
+
+async def send_error_response(interaction, message: str) -> None:
+    embed = discord.Embed(
+        title="A Discordant Wave",
+        description=message,
+        color=0x2F6FB3,
+    )
+
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+    except discord.HTTPException:
+        LOGGER.exception("Failed to send command error response")
+
+
+@bot.tree.error
+async def on_app_command_error(interaction, error):
+    command_name = interaction.command.qualified_name if interaction.command else "unknown"
+    guild_id = interaction.guild.id if interaction.guild else None
+    channel_id = interaction.channel.id if interaction.channel else None
+    user_id = interaction.user.id if interaction.user else None
+
+    LOGGER.error(
+        "App command failed: command=%s guild=%s channel=%s user=%s",
+        command_name,
+        guild_id,
+        channel_id,
+        user_id,
+        exc_info=(type(error), error, error.__traceback__),
+    )
+    await send_error_response(
+        interaction,
+        "Dolia hit an internal error while handling that command. Please try again in a moment.",
+    )
 
 
 async def wait_for_lavalink(max_attempts: int = 20, delay_seconds: int = 3) -> None:
@@ -114,6 +164,8 @@ async def on_ready():
 
 
 async def main() -> None:
+    configure_logging()
+
     if not DISCORD_TOKEN:
         raise RuntimeError("DISCORD_TOKEN is missing")
     if not LAVALINK_PASSWORD:
