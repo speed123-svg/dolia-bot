@@ -70,7 +70,7 @@ Most playback data is used temporarily in memory so the Bot can manage the curre
 
 The Bot does not sell personal data. The Bot does not ask for Discord passwords, login tokens, payment information, or other sensitive account credentials. Never provide those credentials to the Bot or to anyone claiming to operate it.
 
-For privacy requests or questions, use the contact method in Section 12.
+For more detail about how the Bot handles data, see the [Privacy Policy](PRIVACY_POLICY.md). For privacy requests or questions, use the contact method in Section 12.
 
 ## 9. Availability and Support
 
